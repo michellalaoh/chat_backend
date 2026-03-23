@@ -3,6 +3,7 @@ import {
   Post,
   Body,
   Get,
+  Query,
   Param,
   ParseUUIDPipe,
   UseGuards,
@@ -11,11 +12,12 @@ import { MessagesService } from './messages.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { GetMessagesDto } from './dto/get-messages.dto';
 
 @Controller('messages')
 @UseGuards(JwtAuthGuard)
 export class MessagesController {
-  constructor(private service: MessagesService) {}
+  constructor(private service: MessagesService) { }
 
   @Post()
   send(
@@ -29,8 +31,23 @@ export class MessagesController {
     });
   }
 
-  @Get(':conversationId')
-  get(@Param('conversationId', ParseUUIDPipe) conversationId: string) {
-    return this.service.getMessages(conversationId);
+  @Get()
+  getMessages(@Query() query: GetMessagesDto) {
+    return this.service.getMessagesPaginated({
+      conversationId: query.conversationId,
+      cursor: query.cursor,
+      limit: query.limit ?? 20,
+    });
+  }
+
+  @Post(':id/read')
+  markRead(
+    @Param('id') messageId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.markAsRead(
+      messageId,
+      user.userId,
+    );
   }
 }

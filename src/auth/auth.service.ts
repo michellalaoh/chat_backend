@@ -1,4 +1,9 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+} from '@nestjs/common';
+
 import { UsersService } from '../users/users.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -6,45 +11,85 @@ import * as bcrypt from 'bcrypt';
 @Injectable()
 export class AuthService {
   constructor(
-    private usersService: UsersService,
-    private jwtService: JwtService,
+    private readonly usersService: UsersService,
+    private readonly jwtService: JwtService,
   ) {}
 
+  // =========================
   // REGISTER
+  // =========================
   async register(email: string, password: string) {
+    // ✅ check existing user
+    const existing =
+      await this.usersService.findByEmail(email);
+
+    if (existing) {
+      throw new ConflictException(
+        'Email already registered',
+      );
+    }
+
+    // ✅ hash password
     const hash = await bcrypt.hash(password, 10);
 
+    // ✅ create user via UsersService
     const user = await this.usersService.createUser({
       email,
-      username: email,
-      displayName: email,
+      username: email.split('@')[0],
+      displayName: email.split('@')[0],
       password: hash,
     });
 
-    return this.generateToken(user.id);
+    return this.buildAuthResponse(user);
   }
 
+  // =========================
   // LOGIN
+  // =========================
   async login(email: string, password: string) {
-    const user = await this.usersService.findByEmail(email);
+    const user =
+      await this.usersService.findByEmail(email);
 
-    if (!user) throw new UnauthorizedException();
+    if (!user) {
+      throw new UnauthorizedException(
+        'Invalid credentials',
+      );
+    }
 
     const valid = await bcrypt.compare(
       password,
       user.password,
     );
 
-    if (!valid) throw new UnauthorizedException();
+    if (!valid) {
+      throw new UnauthorizedException(
+        'Invalid credentials',
+      );
+    }
 
-    return this.generateToken(user.id);
+    return this.buildAuthResponse(user);
   }
 
-  private generateToken(userId: string) {
+  // =========================
+  // TOKEN CREATION
+  // =========================
+  private buildAuthResponse(user: any) {
+    const payload = {
+      sub: user.id,
+      email: user.email,
+    };
+
+    const accessToken =
+      this.jwtService.sign(payload);
+
     return {
-      accessToken: this.jwtService.sign({
-        sub: userId,
-      }),
+      accessToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        displayName: user.displayName,
+      },
     };
   }
 }
